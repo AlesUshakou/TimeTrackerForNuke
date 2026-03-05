@@ -2,7 +2,7 @@
 <h1> ⏱ TimeTracker for Nuke </h1>
 
 <p align="center">
-<img src="assets/timeTracker.png" width="50%">
+<img src="assets/timeTracker.png" width="100%">
 </p>
 
 A lightweight, encrypted time tracking tool for **The Foundry Nuke**.
@@ -21,7 +21,7 @@ Automatically track **work time** and **render time** per shot.
 ## 🖥 Main Window
 
 <p align="center">
-<img src="assets/ttk.png" width="50%">
+<img src="assets/ttk.png" width="80%">
 </p>
 
 ------------------------------------------------------------------------
@@ -99,7 +99,7 @@ v1.02
 
 
 <p align="center">
-<img src="assets/read_ttk.png" width="50%">
+<img src="assets/read_ttk.png" width="100%">
 </p>
 
 Standalone utility for reading encrypted tracking files.
@@ -117,7 +117,7 @@ Standalone utility for reading encrypted tracking files.
 
 ## 🖥 Main Window
 <p align="center">
-<img src="assets/ttkreader.png" width="50%">
+<img src="assets/ttkreader.png" width="80%">
 </p>
 
 ------------------------------------------------------------------------
