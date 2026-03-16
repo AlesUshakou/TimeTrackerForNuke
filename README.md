@@ -1,7 +1,7 @@
-<div align="center">
-<h1> ⏱ TimeTracker for Nuke </h1>
 
-<p align="center">
+<h1 align="center"> ⏱ TimeTracker for Nuke </h1>
+
+<p>
 <img src="assets/timeTracker.png" width="100%">
 </p>
 
@@ -95,15 +95,13 @@ v1.02
 
 ------------------------------------------------------------------------
 
-## 📊 TimeTracker Reader (Standalone)
+## 📊 TimeTracker Reader
+Standalone utility for reading encrypted tracking files.
 
 
 <p align="center">
 <img src="assets/read_ttk.png" width="100%">
 </p>
-
-Standalone utility for reading encrypted tracking files.
-
 
 
 ### Reader Features
@@ -111,8 +109,18 @@ Standalone utility for reading encrypted tracking files.
 -   Scan `.ttk` folders
 -   View all tracked shots
 -   Sort by work / render time
--   Export to CSV
+-   Export reports to **Excel (.xlsx)** or **PDF**
+-   Copy report path
+-   Open exported report directly
 -   No Nuke required
+
+### Reader Requirements
+
+The standalone reader requires:
+
+```
+pip install openpyxl reportlab
+```
 
 
 ## 🖥 Main Window

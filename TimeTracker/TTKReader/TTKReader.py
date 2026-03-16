@@ -1,10 +1,11 @@
 import os
 import sys
-import csv
 import json
 import base64
 import hashlib
 import hmac
+import subprocess
+import shutil
 from datetime import datetime
 
 # ---- Qt ----
@@ -14,7 +15,7 @@ except ImportError:
     from PySide2 import QtWidgets, QtCore, QtGui
 
 
-TTK_VERSION = "1.0"
+TTK_VERSION = "1.1"
 _TIMETRACKER_KEY = "Ales_Ushakou_Internal_Key_2026"
 _TIMETRACKER_SALT = "Ales_Ushakou_Salt_2026"
 
@@ -186,9 +187,12 @@ class ReaderWindow(QtWidgets.QMainWindow):
         self.pathEdit = QtWidgets.QLineEdit()
         self.btnBrowse = QtWidgets.QPushButton("Choose folder…")
         self.btnScan = QtWidgets.QPushButton("Scan")
-        self.btnExport = QtWidgets.QPushButton("Export CSV…")
-        self.btnCopyFile = QtWidgets.QPushButton("Copy selected .enc path")
+        self.btnExportExcel = QtWidgets.QPushButton("Export Excel…")
+        self.btnExportPDF = QtWidgets.QPushButton("Export PDF…")
+        self.btnCopyReportPath = QtWidgets.QPushButton("Copy report path")
+        self.btnOpenReportFile = QtWidgets.QPushButton("Open report file")
         self.status = QtWidgets.QLabel("")
+        self.last_report_path = ""
 
         # ---- Version label (dynamic, safe) ----
 
@@ -211,8 +215,10 @@ class ReaderWindow(QtWidgets.QMainWindow):
         top.addWidget(self.btnScan)
 
         btns = QtWidgets.QHBoxLayout()
-        btns.addWidget(self.btnExport)
-        btns.addWidget(self.btnCopyFile)
+        btns.addWidget(self.btnExportExcel)
+        btns.addWidget(self.btnExportPDF)
+        btns.addWidget(self.btnCopyReportPath)
+        btns.addWidget(self.btnOpenReportFile)
         btns.addStretch(1)
         btns.addWidget(self.status)
 
@@ -253,8 +259,10 @@ class ReaderWindow(QtWidgets.QMainWindow):
 
         self.btnBrowse.clicked.connect(self.choose_folder)
         self.btnScan.clicked.connect(self.scan)
-        self.btnExport.clicked.connect(self.export_csv)
-        self.btnCopyFile.clicked.connect(self.copy_selected_file)
+        self.btnExportExcel.clicked.connect(self.export_excel)
+        self.btnExportPDF.clicked.connect(self.export_pdf)
+        self.btnCopyReportPath.clicked.connect(self.copy_report_path)
+        self.btnOpenReportFile.clicked.connect(self.open_report_file)
 
         # initial folder from settings (or fallback)
         try:
@@ -384,56 +392,191 @@ class ReaderWindow(QtWidgets.QMainWindow):
 
         self.table.setSortingEnabled(True)
 
-    def export_csv(self):
+    def _suggest_report_name(self, ext: str) -> str:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"timetracker_report_{stamp}.{ext}"
+
+    def _set_last_report_path(self, path: str):
+        self.last_report_path = os.path.normpath(path) if path else ""
+        if self.last_report_path:
+            self.set_status(f"Report: {self.last_report_path}")
+
+    def export_excel(self):
         if not self.rows:
             QtWidgets.QMessageBox.information(self, "Info", "Nothing to export. Scan first.")
             return
 
+        try:
+            from openpyxl import Workbook
+        except Exception:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Missing dependency",
+                "openpyxl is not installed.\nInstall it with: pip install openpyxl",
+            )
+            return
+
         out, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
-            "Export CSV",
-            "timetracker_report.csv",
-            "CSV (*.csv)",
+            "Export Excel",
+            self._suggest_report_name("xlsx"),
+            "Excel (*.xlsx)",
         )
         if not out:
             return
+        if not out.lower().endswith(".xlsx"):
+            out += ".xlsx"
 
-        with open(out, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(COLS)
-            for r in self.rows:
-                w.writerow(
-                    [
-                        r.get("computer", ""),
-                        r.get("shot", ""),
-                        r.get("work", ""),
-                        r.get("render", ""),
-                        r.get("started_at", ""),
-                        r.get("finished_at", ""),
-                        r.get("file", ""),
-                    ]
-                )
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TimeTracker Report"
+        ws.append(COLS)
 
+        for r in self.rows:
+            ws.append([
+                r.get("computer", ""),
+                r.get("shot", ""),
+                r.get("work", ""),
+                r.get("render", ""),
+                r.get("started_at", ""),
+                r.get("finished_at", ""),
+                r.get("file", ""),
+            ])
+
+        # auto column width
+        for col_cells in ws.columns:
+            max_len = 0
+            col_letter = col_cells[0].column_letter
+            for cell in col_cells:
+                try:
+                    val = "" if cell.value is None else str(cell.value)
+                except Exception:
+                    val = ""
+                max_len = max(max_len, len(val))
+            ws.column_dimensions[col_letter].width = min(max(max_len + 2, 10), 60)
+
+        wb.save(out)
+        self._set_last_report_path(out)
         QtWidgets.QMessageBox.information(self, "Done", f"Saved:\n{out}")
 
-    def copy_selected_file(self):
-        row = self.table.currentRow()
-        if row < 0:
-            QtWidgets.QMessageBox.information(self, "Info", "Select a row first.")
+    def export_pdf(self):
+        if not self.rows:
+            QtWidgets.QMessageBox.information(self, "Info", "Nothing to export. Scan first.")
             return
 
-        fp_item = self.table.item(row, 6)
-        fp = ""
         try:
-            fp = (fp_item.data(QtCore.Qt.UserRole) or "") if fp_item else ""
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.enums import TA_LEFT
+            from reportlab.lib.units import mm
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
         except Exception:
-            fp = ""
-
-        if not fp:
-            QtWidgets.QMessageBox.information(self, "Info", "Can't read file path from selection.")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Missing dependency",
+                "reportlab is not installed.\nInstall it with: pip install reportlab",
+            )
             return
 
-        QtWidgets.QApplication.clipboard().setText(os.path.normpath(fp))
+        out, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export PDF",
+            self._suggest_report_name("pdf"),
+            "PDF (*.pdf)",
+        )
+        if not out:
+            return
+        if not out.lower().endswith(".pdf"):
+            out += ".pdf"
+
+        doc = SimpleDocTemplate(out, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=10 * mm, bottomMargin=10 * mm)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle("TTKTitle", parent=styles["Title"], alignment=TA_LEFT, textColor=colors.HexColor("#ff8a00"), fontSize=18, leading=22, spaceAfter=4)
+        subtitle_style = ParagraphStyle("TTKSubtitle", parent=styles["Normal"], alignment=TA_LEFT, fontSize=9, textColor=colors.HexColor("#666666"), leading=11, spaceAfter=10)
+
+        elements = []
+
+        banner = _banner_path()
+        if os.path.isfile(banner):
+            try:
+                img = Image(banner)
+                max_w = doc.width
+                iw = float(getattr(img, 'imageWidth', 1) or 1)
+                ih = float(getattr(img, 'imageHeight', 1) or 1)
+                scale = min(max_w / iw, 1.0)
+                img.drawWidth = iw * scale
+                img.drawHeight = ih * scale
+                elements.append(img)
+                elements.append(Spacer(1, 6))
+            except Exception:
+                pass
+
+        elements.append(Paragraph("TimeTracker Report", title_style))
+        elements.append(Paragraph("from TTKReader", subtitle_style))
+
+        data = [COLS]
+        for r in self.rows:
+            data.append([
+                r.get("computer", ""),
+                r.get("shot", ""),
+                r.get("work", ""),
+                r.get("render", ""),
+                r.get("started_at", ""),
+                r.get("finished_at", ""),
+                r.get("file", ""),
+            ])
+
+        table = Table(data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ff8a00")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("LEADING", (0, 0), (-1, -1), 10),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor("#f7f7f7")]),
+            ("ALIGN", (2, 1), (3, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(table)
+
+        doc.build(elements)
+        self._set_last_report_path(out)
+        QtWidgets.QMessageBox.information(self, "Done", f"Saved:\n{out}")
+
+    def copy_report_path(self):
+        if not self.last_report_path:
+            QtWidgets.QMessageBox.information(self, "Info", "No report file yet. Export Excel or PDF first.")
+            return
+        QtWidgets.QApplication.clipboard().setText(self.last_report_path)
+        self.set_status(f"Copied report path: {self.last_report_path}")
+
+    def open_report_file(self):
+        if not self.last_report_path:
+            QtWidgets.QMessageBox.information(self, "Info", "No report file yet. Export Excel or PDF first.")
+            return
+        path = self.last_report_path
+        if not os.path.isfile(path):
+            QtWidgets.QMessageBox.warning(self, "Error", f"File not found:\n{path}")
+            return
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            else:
+                opener = shutil.which("xdg-open")
+                if opener:
+                    subprocess.Popen([opener, path])
+                else:
+                    raise RuntimeError("xdg-open not found")
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Error", f"Could not open file:\n{e}")
 
 
 def main():
