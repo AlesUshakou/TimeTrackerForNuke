@@ -202,11 +202,33 @@ class ReaderWindow(QtWidgets.QMainWindow):
         self.versionLabel.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
         self.copyrightLabel = QtWidgets.QLabel(
-            '<a href="https://www.linkedin.com/in/ales-ushakou/">© Aleš Ushakou, 2026</a>'
+            '<span style="color:#888888;">© Aleš Ushakou, 2026</span>'
         )
-        self.copyrightLabel.setOpenExternalLinks(True)
         self.copyrightLabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.copyrightLabel.setObjectName("Hint")
+        self.copyrightLabel.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.copyrightLabel.setToolTip("Open LinkedIn profile")
+
+        ORANGE = "#FFC266"  # 🔥 наш любимый оранж
+
+        def _open_linkedin(event):
+            QtGui.QDesktopServices.openUrl(
+                QtCore.QUrl("https://www.linkedin.com/in/ales-ushakou/")
+            )
+
+        def _copyright_enter(event):
+            self.copyrightLabel.setText(
+                f'<span style="color:{ORANGE};">© Aleš Ushakou, 2026</span>'
+            )
+
+        def _copyright_leave(event):
+            self.copyrightLabel.setText(
+                '<span style="color:#888888;">© Aleš Ushakou, 2026</span>'
+            )
+
+        self.copyrightLabel.mousePressEvent = _open_linkedin
+        self.copyrightLabel.enterEvent = _copyright_enter
+        self.copyrightLabel.leaveEvent = _copyright_leave
 
         top = QtWidgets.QHBoxLayout()
         top.addWidget(QtWidgets.QLabel("Root folder:"))
