@@ -269,11 +269,70 @@ class ReaderWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.table, 1)
         layout.addLayout(footer)
 
-        # subtle hint styling (works for both dark/light)
+
+        # subtle premium styling
         self.setStyleSheet(
             """
-            QLabel#Hint { color: rgba(200,200,200,140); }
-            QTableWidget::item:selected { background: rgba(80,120,200,120); }
+            QLabel#Hint {
+                color: #888888;
+            }
+
+            QPushButton {
+                background-color: #2a2a2a;
+                color: #e6e6e6;
+                border: 1px solid #333333;
+                padding: 6px 12px;
+                border-radius: 6px;
+            }
+
+            QPushButton:hover {
+                border: 1px solid #FFC266;
+                color: #FFC266;
+            }
+
+            QPushButton:pressed {
+                background-color: #1e1e1e;
+                border: 1px solid #FFB347;
+                color: #FFB347;
+            }
+
+            QLineEdit {
+                background-color: #232323;
+                color: #e6e6e6;
+                border: 1px solid #333333;
+                border-radius: 6px;
+                padding: 5px 8px;
+                selection-background-color: #FFC266;
+                selection-color: #1e1e1e;
+            }
+
+            QLineEdit:focus {
+                border: 1px solid #FFC266;
+            }
+
+            QTableWidget {
+                gridline-color: #333333;
+                alternate-background-color: #252525;
+                background-color: #1f1f1f;
+                color: #e6e6e6;
+                border: 1px solid #333333;
+            }
+
+            QHeaderView::section {
+                background-color: #2a2a2a;
+                color: #d8d8d8;
+                border: 1px solid #333333;
+                padding: 6px;
+            }
+
+            QTableWidget::item:selected {
+                background: rgba(255, 194, 102, 90);
+                color: #ffffff;
+            }
+
+            QTableWidget::item:hover {
+                background: rgba(255, 194, 102, 35);
+            }
             """
         )
 
